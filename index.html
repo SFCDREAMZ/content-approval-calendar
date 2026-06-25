@@ -16,12 +16,32 @@
       <span class="brand-mark" aria-hidden="true">SF</span>
       <div class="brand-text">
         <h1>Content Approval Calendar</h1>
-        <p>Review scheduled posts and sign off for the month.</p>
+        <p id="brand-sub">Review scheduled posts and sign off for the month.</p>
+      </div>
+      <div class="header-actions" id="header-actions" hidden>
+        <span class="user-email" id="user-email"></span>
+        <button class="ghost-btn" id="signout-btn" type="button">Sign out</button>
       </div>
     </div>
   </header>
 
   <main class="app-main">
+    <!-- Admin toolbar (admin mode only) -->
+    <section class="toolbar" id="admin-toolbar" aria-label="Admin controls" hidden>
+      <div class="toolbar-group">
+        <label class="toolbar-label" for="client-select">Client</label>
+        <select id="client-select" class="toolbar-select"></select>
+        <button class="ghost-btn" id="new-client-btn" type="button">+ New client</button>
+      </div>
+      <div class="toolbar-group toolbar-right">
+        <button class="ghost-btn" id="copy-link-btn" type="button">Copy review link</button>
+        <button class="primary-btn" id="add-post-btn" type="button">+ Add post</button>
+      </div>
+    </section>
+
+    <!-- Banner / status line -->
+    <p class="banner" id="banner" hidden></p>
+
     <!-- Summary bar -->
     <section class="summary" aria-label="Approval summary">
       <div class="summary-card">
@@ -59,7 +79,7 @@
     </section>
   </main>
 
-  <!-- Post detail / approval modal -->
+  <!-- ============ Client review modal (read-only + approve) ============ -->
   <div class="modal-overlay" id="modal-overlay" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-caption">
       <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
@@ -86,6 +106,77 @@
     </div>
   </div>
 
+  <!-- ============ Admin post editor modal ============ -->
+  <div class="modal-overlay" id="editor-overlay" hidden>
+    <form class="modal" id="editor-form" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+      <button class="modal-close" id="editor-close" type="button" aria-label="Close">&times;</button>
+      <h3 class="editor-title" id="editor-title">Add post</h3>
+
+      <div class="field-row">
+        <div class="field">
+          <label class="notes-label" for="f-date">Date</label>
+          <input class="text-input" type="date" id="f-date" required />
+        </div>
+        <div class="field">
+          <label class="notes-label" for="f-platform">Platform</label>
+          <select class="text-input" id="f-platform">
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="notes-label" for="f-type">Post type</label>
+        <select class="text-input" id="f-type">
+          <option>Photo</option>
+          <option>Video</option>
+          <option>Reel</option>
+          <option>Carousel</option>
+          <option>Story</option>
+          <option>Link</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="notes-label" for="f-caption">Caption</label>
+        <textarea class="notes-input" id="f-caption" rows="3" placeholder="Write the post caption…"></textarea>
+      </div>
+
+      <div class="field">
+        <label class="notes-label" for="f-image">Image URL</label>
+        <input class="text-input" type="url" id="f-image" placeholder="https://…" />
+      </div>
+
+      <div class="modal-actions editor-actions">
+        <button class="btn btn-delete" id="editor-delete" type="button" hidden>Delete</button>
+        <button class="btn btn-approve" id="editor-save" type="submit">Save post</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ============ Admin login modal ============ -->
+  <div class="modal-overlay" id="login-overlay" hidden>
+    <form class="modal modal-narrow" id="login-form" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <h3 class="editor-title" id="login-title">Admin sign in</h3>
+      <p class="login-hint">Sign in with your Supabase user to manage the calendar.</p>
+      <div class="field">
+        <label class="notes-label" for="login-email">Email</label>
+        <input class="text-input" type="email" id="login-email" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label class="notes-label" for="login-password">Password</label>
+        <input class="text-input" type="password" id="login-password" autocomplete="current-password" required />
+      </div>
+      <p class="login-error" id="login-error" hidden></p>
+      <div class="modal-actions">
+        <button class="btn btn-approve" id="login-submit" type="submit">Sign in</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Supabase JS client (CDN, no build step) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>

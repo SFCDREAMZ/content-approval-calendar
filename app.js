@@ -1,91 +1,70 @@
 /* Content Approval Calendar
- * Static, dependency-free. State persists in localStorage. */
+ * Static, no build step. Data lives in Supabase.
+ *
+ *  Two modes, chosen by the URL:
+ *   - ADMIN  (default)            : sign in, manage clients & posts.
+ *   - CLIENT (?client=TOKEN)      : read-only review, approve / request changes.
+ */
 
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "cac.posts.v1";
+  /* ---------------- Supabase ---------------- */
+  // These are public by design (the anon key is safe to ship in the browser).
+  var SUPABASE_URL = "https://xsaswfrbtsfvquttrdml.supabase.co";
+  var SUPABASE_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzYXN3ZnJidHNmdnF1dHRyZG1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MTU5NTUsImV4cCI6MjA5Nzk5MTk1NX0.6dEJhmHmU7d5JvKsjA9eRFwkNVBTQaKmubUfo4dwDdA";
 
+  var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  /* ---------------- Constants ---------------- */
   var PLATFORMS = {
     facebook:  { label: "Facebook",  icon: "f" },
     instagram: { label: "Instagram", icon: "◉" }
   };
 
   var STATUSES = {
-    pending:  { label: "Pending",           cls: "status-pending"  },
-    approved: { label: "Approved",          cls: "status-approved" },
-    changes:  { label: "Changes Requested", cls: "status-changes"  }
+    pending:            { label: "Pending",           cls: "status-pending"  },
+    approved:           { label: "Approved",          cls: "status-approved" },
+    changes_requested:  { label: "Changes Requested", cls: "status-changes"  }
   };
 
   var MONTH_NAMES = ["January","February","March","April","May","June",
     "July","August","September","October","November","December"];
 
-  /* ---- Sample data: ~8 posts across June 2026 ---- */
-  function seedPosts() {
-    return [
-      { id: "p1", date: "2026-06-02", platform: "instagram", type: "Reel",
-        caption: "Behind-the-scenes of our summer photoshoot — sneak peek at the new collection!",
-        status: "pending", notes: "" },
-      { id: "p2", date: "2026-06-05", platform: "facebook", type: "Photo",
-        caption: "Meet the team Friday: introducing our lead designer and what inspires her work.",
-        status: "approved", notes: "Looks great — approved." },
-      { id: "p3", date: "2026-06-09", platform: "instagram", type: "Carousel",
-        caption: "5 tips to refresh your brand this summer. Swipe through for the full breakdown.",
-        status: "pending", notes: "" },
-      { id: "p4", date: "2026-06-12", platform: "facebook", type: "Link",
-        caption: "New on the blog: how small businesses can plan a content calendar that actually sticks.",
-        status: "changes", notes: "Please shorten the caption and add the blog link tracking tag." },
-      { id: "p5", date: "2026-06-16", platform: "instagram", type: "Story",
-        caption: "Flash poll: which color palette should we feature next? Vote in stories today!",
-        status: "pending", notes: "" },
-      { id: "p6", date: "2026-06-19", platform: "facebook", type: "Video",
-        caption: "Client spotlight — a 60-second look at the campaign that doubled their reach.",
-        status: "approved", notes: "" },
-      { id: "p7", date: "2026-06-23", platform: "instagram", type: "Photo",
-        caption: "Mid-week motivation: a clean workspace and a clear plan. ✨ #SocialFlare",
-        status: "pending", notes: "" },
-      { id: "p8", date: "2026-06-27", platform: "facebook", type: "Photo",
-        caption: "Weekend reminder: book your July content session before slots fill up.",
-        status: "pending", notes: "" }
-    ];
-  }
+  /* ---------------- State ---------------- */
+  var params      = new URLSearchParams(window.location.search);
+  var reviewToken = params.get("client");
+  var MODE        = reviewToken ? "client" : "admin";
 
-  /* ---- State ---- */
-  var posts = loadPosts();
-  var view = new Date(2026, 5, 1); // June 2026 to match sample data
-  var activeId = null;
+  var posts           = [];     // posts currently shown (selected client / review)
+  var clients         = [];     // admin: list of clients
+  var currentClientId = null;   // admin: selected client
+  var clientName      = "";     // display name for header
+  var view            = new Date();
+  view = new Date(view.getFullYear(), view.getMonth(), 1);
+  var activeId  = null;         // post open in the review modal
+  var editingId = null;         // post open in the editor (null = adding)
 
-  function loadPosts() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) return parsed;
-      }
-    } catch (e) { /* ignore corrupt storage */ }
-    var seeded = seedPosts();
-    savePosts(seeded);
-    return seeded;
-  }
-
-  function savePosts(data) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data || posts)); }
-    catch (e) { /* storage may be unavailable; app still works in-memory */ }
-  }
-
-  /* ---- Helpers ---- */
+  /* ---------------- Small DOM helpers ---------------- */
+  function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
   function dateKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+
+  function showBanner(msg, kind) {
+    var b = $("banner");
+    b.textContent = msg;
+    b.className = "banner" + (kind ? " banner-" + kind : "");
+    b.hidden = !msg;
+  }
 
   function postsForDate(key) {
     return posts.filter(function (p) { return p.date === key; });
   }
-
   function getPost(id) {
     for (var i = 0; i < posts.length; i++) { if (posts[i].id === id) return posts[i]; }
     return null;
   }
-
   function formatLongDate(key) {
     var parts = key.split("-");
     var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
@@ -93,34 +72,32 @@
     return weekdays[d.getDay()] + ", " + MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
   }
 
-  /* ---- Rendering ---- */
+  /* ---------------- Rendering ---------------- */
   function renderSummary() {
     var total = posts.length, approved = 0, pending = 0, changes = 0;
     posts.forEach(function (p) {
       if (p.status === "approved") approved++;
-      else if (p.status === "changes") changes++;
+      else if (p.status === "changes_requested") changes++;
       else pending++;
     });
-    document.getElementById("stat-total").textContent = total;
-    document.getElementById("stat-approved").textContent = approved;
-    document.getElementById("stat-pending").textContent = pending;
-    document.getElementById("stat-changes").textContent = changes;
+    $("stat-total").textContent    = total;
+    $("stat-approved").textContent = approved;
+    $("stat-pending").textContent  = pending;
+    $("stat-changes").textContent  = changes;
   }
 
   function renderCalendar() {
     var year = view.getFullYear();
     var month = view.getMonth();
-    document.getElementById("month-title").textContent = MONTH_NAMES[month] + " " + year;
+    $("month-title").textContent = MONTH_NAMES[month] + " " + year;
 
-    var grid = document.getElementById("calendar-grid");
+    var grid = $("calendar-grid");
     grid.innerHTML = "";
 
     var first = new Date(year, month, 1);
     var startOffset = first.getDay();          // 0 = Sunday
-    var daysInMonth = new Date(year, month + 1, 0).getDate();
     var todayKey = dateKey(new Date());
 
-    // Build a 6-row grid so layout stays stable across months.
     var startDate = new Date(year, month, 1 - startOffset);
     for (var i = 0; i < 42; i++) {
       var cellDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
@@ -137,14 +114,22 @@
 
       postsForDate(key).forEach(function (p) { cell.appendChild(buildChip(p)); });
 
+      // Admin: click an empty part of an in-month cell to add a post on that day.
+      if (MODE === "admin" && inMonth) {
+        cell.classList.add("is-clickable");
+        (function (k) {
+          cell.addEventListener("click", function (e) {
+            if (e.target === cell || e.target === num) openEditor(null, k);
+          });
+        })(key);
+      }
+
       grid.appendChild(cell);
     }
-
-    // Trim trailing empty week if it has no in-month days (keeps grid tight).
-    trimTrailingEmptyWeek(grid, month);
+    trimTrailingEmptyWeek(grid);
   }
 
-  function trimTrailingEmptyWeek(grid, month) {
+  function trimTrailingEmptyWeek(grid) {
     var cells = grid.children;
     if (cells.length < 42) return;
     var lastRowEmpty = true;
@@ -171,11 +156,11 @@
 
     var type = document.createElement("span");
     type.className = "post-type";
-    type.textContent = p.type;
+    type.textContent = p.post_type;
     top.appendChild(type);
 
     var status = document.createElement("span");
-    status.className = "status-dot " + STATUSES[p.status].cls;
+    status.className = "status-dot " + (STATUSES[p.status] || STATUSES.pending).cls;
     top.appendChild(status);
 
     chip.appendChild(top);
@@ -185,83 +170,359 @@
     cap.textContent = p.caption;
     chip.appendChild(cap);
 
-    chip.addEventListener("click", function () { openModal(p.id); });
+    chip.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (MODE === "admin") openEditor(p.id);
+      else openReview(p.id);
+    });
     return chip;
   }
 
-  /* ---- Modal ---- */
-  function openModal(id) {
+  function setThumb(el, p) {
+    el.className = "modal-thumb platform-" + p.platform;
+    if (p.image_url) {
+      el.style.backgroundImage = "url('" + p.image_url.replace(/'/g, "%27") + "')";
+      el.textContent = "";
+    } else {
+      el.style.backgroundImage = "";
+      el.textContent = (PLATFORMS[p.platform] || {}).icon || "";
+    }
+  }
+
+  /* ---------------- Client review modal ---------------- */
+  function openReview(id) {
     var p = getPost(id);
     if (!p) return;
     activeId = id;
 
-    var thumb = document.getElementById("modal-thumb");
-    thumb.className = "modal-thumb platform-" + p.platform;
-    thumb.textContent = PLATFORMS[p.platform].icon;
+    setThumb($("modal-thumb"), p);
 
-    var plat = document.getElementById("modal-platform");
+    var plat = $("modal-platform");
     plat.className = "platform-tag platform-" + p.platform;
-    plat.textContent = PLATFORMS[p.platform].label;
+    plat.textContent = (PLATFORMS[p.platform] || {}).label || p.platform;
 
-    document.getElementById("modal-type").textContent = p.type;
+    $("modal-type").textContent = p.post_type;
 
-    var statusEl = document.getElementById("modal-status");
-    statusEl.className = "status-pill " + STATUSES[p.status].cls;
-    statusEl.textContent = STATUSES[p.status].label;
+    var statusEl = $("modal-status");
+    var st = STATUSES[p.status] || STATUSES.pending;
+    statusEl.className = "status-pill " + st.cls;
+    statusEl.textContent = st.label;
 
-    document.getElementById("modal-date").textContent = formatLongDate(p.date);
-    document.getElementById("modal-caption").textContent = p.caption;
-    document.getElementById("modal-notes").value = p.notes || "";
+    $("modal-date").textContent = formatLongDate(p.date);
+    $("modal-caption").textContent = p.caption;
+    $("modal-notes").value = p.reviewer_notes || "";
 
-    document.getElementById("modal-overlay").hidden = false;
-    document.getElementById("modal-notes").focus();
+    $("modal-overlay").hidden = false;
+    $("modal-notes").focus();
   }
-
-  function closeModal() {
-    document.getElementById("modal-overlay").hidden = true;
+  function closeReview() {
+    $("modal-overlay").hidden = true;
     activeId = null;
   }
 
-  function setStatus(status) {
+  async function submitReview(status) {
     if (!activeId) return;
-    var p = getPost(activeId);
-    if (!p) return;
-    p.status = status;
-    p.notes = document.getElementById("modal-notes").value.trim();
-    savePosts();
-    renderSummary();
-    renderCalendar();
-    closeModal();
+    var notes = $("modal-notes").value.trim();
+    var approveBtn = $("btn-approve"), changesBtn = $("btn-request-changes");
+    approveBtn.disabled = changesBtn.disabled = true;
+    try {
+      var res = await db.rpc("submit_review", {
+        p_token: reviewToken,
+        p_post_id: activeId,
+        p_status: status,
+        p_notes: notes
+      });
+      if (res.error) throw res.error;
+      var p = getPost(activeId);
+      if (p) { p.status = status; p.reviewer_notes = notes; }
+      renderSummary();
+      renderCalendar();
+      closeReview();
+    } catch (err) {
+      alert("Could not save your review: " + (err.message || err));
+    } finally {
+      approveBtn.disabled = changesBtn.disabled = false;
+    }
   }
 
-  /* ---- Events ---- */
-  function init() {
-    document.getElementById("prev-month").addEventListener("click", function () {
-      view = new Date(view.getFullYear(), view.getMonth() - 1, 1);
-      renderCalendar();
-    });
-    document.getElementById("next-month").addEventListener("click", function () {
-      view = new Date(view.getFullYear(), view.getMonth() + 1, 1);
-      renderCalendar();
-    });
-    document.getElementById("today-btn").addEventListener("click", function () {
-      var now = new Date();
-      view = new Date(now.getFullYear(), now.getMonth(), 1);
-      renderCalendar();
-    });
+  /* ---------------- Admin: post editor ---------------- */
+  function openEditor(id, presetDate) {
+    editingId = id || null;
+    var p = id ? getPost(id) : null;
 
-    document.getElementById("modal-close").addEventListener("click", closeModal);
-    document.getElementById("modal-overlay").addEventListener("click", function (e) {
-      if (e.target === this) closeModal();
-    });
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") closeModal();
-    });
-    document.getElementById("btn-approve").addEventListener("click", function () { setStatus("approved"); });
-    document.getElementById("btn-request-changes").addEventListener("click", function () { setStatus("changes"); });
+    $("editor-title").textContent = p ? "Edit post" : "Add post";
+    $("f-date").value     = p ? p.date : (presetDate || dateKey(new Date()));
+    $("f-platform").value = p ? p.platform : "facebook";
+    $("f-type").value     = p ? p.post_type : "Photo";
+    $("f-caption").value  = p ? p.caption : "";
+    $("f-image").value    = p ? (p.image_url || "") : "";
+    $("editor-delete").hidden = !p;
 
+    $("editor-overlay").hidden = false;
+    $("f-caption").focus();
+  }
+  function closeEditor() {
+    $("editor-overlay").hidden = true;
+    editingId = null;
+  }
+
+  async function saveEditor(e) {
+    e.preventDefault();
+    if (!currentClientId) { alert("Create or select a client first."); return; }
+
+    var record = {
+      client_id: currentClientId,
+      date:      $("f-date").value,
+      platform:  $("f-platform").value,
+      post_type: $("f-type").value,
+      caption:   $("f-caption").value.trim(),
+      image_url: $("f-image").value.trim() || null
+    };
+    if (!record.date) { alert("Please pick a date."); return; }
+
+    var saveBtn = $("editor-save");
+    saveBtn.disabled = true;
+    try {
+      if (editingId) {
+        var up = await db.from("posts").update(record).eq("id", editingId);
+        if (up.error) throw up.error;
+      } else {
+        var ins = await db.from("posts").insert(record);
+        if (ins.error) throw ins.error;
+      }
+      closeEditor();
+      await loadAdminPosts();
+    } catch (err) {
+      alert("Could not save the post: " + (err.message || err));
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deletePost() {
+    if (!editingId) return;
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    try {
+      var res = await db.from("posts").delete().eq("id", editingId);
+      if (res.error) throw res.error;
+      closeEditor();
+      await loadAdminPosts();
+    } catch (err) {
+      alert("Could not delete the post: " + (err.message || err));
+    }
+  }
+
+  /* ---------------- Admin: clients ---------------- */
+  function renderClientOptions() {
+    var sel = $("client-select");
+    sel.innerHTML = "";
+    if (!clients.length) {
+      var opt = document.createElement("option");
+      opt.value = ""; opt.textContent = "No clients yet";
+      sel.appendChild(opt);
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    clients.forEach(function (c) {
+      var o = document.createElement("option");
+      o.value = c.id; o.textContent = c.name;
+      sel.appendChild(o);
+    });
+    sel.value = currentClientId || clients[0].id;
+  }
+
+  async function loadClients() {
+    var res = await db.from("clients").select("*").order("created_at", { ascending: true });
+    if (res.error) { showBanner("Could not load clients: " + res.error.message, "error"); return; }
+    clients = res.data || [];
+    if (clients.length && !currentClientId) currentClientId = clients[0].id;
+    if (currentClientId && !clients.some(function (c) { return c.id === currentClientId; })) {
+      currentClientId = clients.length ? clients[0].id : null;
+    }
+    renderClientOptions();
+  }
+
+  async function loadAdminPosts() {
+    if (!currentClientId) {
+      posts = [];
+      showBanner("Create your first client to start adding posts.", "");
+      renderSummary(); renderCalendar();
+      return;
+    }
+    var res = await db.from("posts").select("*")
+      .eq("client_id", currentClientId)
+      .order("date", { ascending: true });
+    if (res.error) { showBanner("Could not load posts: " + res.error.message, "error"); return; }
+    posts = res.data || [];
+    var c = clients.filter(function (x) { return x.id === currentClientId; })[0];
+    clientName = c ? c.name : "";
+    showBanner("");
+    renderSummary(); renderCalendar();
+  }
+
+  async function newClient() {
+    var name = window.prompt("New client name:");
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+    var res = await db.from("clients").insert({ name: name }).select().single();
+    if (res.error) { alert("Could not create client: " + res.error.message); return; }
+    currentClientId = res.data.id;
+    await loadClients();
+    renderClientOptions();
+    await loadAdminPosts();
+  }
+
+  function reviewLinkFor(clientId) {
+    var c = clients.filter(function (x) { return x.id === clientId; })[0];
+    if (!c) return null;
+    var base = window.location.origin + window.location.pathname;
+    return base + "?client=" + encodeURIComponent(c.review_token);
+  }
+
+  async function copyReviewLink() {
+    if (!currentClientId) { alert("Select a client first."); return; }
+    var link = reviewLinkFor(currentClientId);
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      showBanner("Review link copied to clipboard ✓", "ok");
+      setTimeout(function () { showBanner(""); }, 4000);
+    } catch (e) {
+      window.prompt("Copy this client review link:", link);
+    }
+  }
+
+  /* ---------------- Admin: auth ---------------- */
+  function showLogin(show) { $("login-overlay").hidden = !show; }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    var email = $("login-email").value.trim();
+    var password = $("login-password").value;
+    var err = $("login-error");
+    err.hidden = true;
+    $("login-submit").disabled = true;
+    try {
+      var res = await db.auth.signInWithPassword({ email: email, password: password });
+      if (res.error) throw res.error;
+      // onAuthStateChange handles the rest.
+    } catch (ex) {
+      err.textContent = ex.message || "Sign in failed.";
+      err.hidden = false;
+    } finally {
+      $("login-submit").disabled = false;
+    }
+  }
+
+  async function enterAdmin() {
+    showLogin(false);
+    $("admin-toolbar").hidden = false;
+    $("header-actions").hidden = false;
+    var sess = await db.auth.getSession();
+    var user = sess.data.session ? sess.data.session.user : null;
+    $("user-email").textContent = user ? user.email : "";
+    $("brand-sub").textContent = "Admin — manage clients and scheduled posts.";
+    await loadClients();
+    await loadAdminPosts();
+  }
+
+  function exitAdmin() {
+    $("admin-toolbar").hidden = true;
+    $("header-actions").hidden = true;
+    posts = []; clients = []; currentClientId = null;
+    renderSummary(); renderCalendar();
+    showLogin(true);
+  }
+
+  /* ---------------- Client mode bootstrap ---------------- */
+  async function enterClient() {
+    $("brand-sub").textContent = "Loading review…";
+    var res = await db.rpc("get_client_review", { p_token: reviewToken });
+    if (res.error) {
+      showBanner("Could not load this review link: " + res.error.message, "error");
+      return;
+    }
+    if (!res.data) {
+      $("brand-sub").textContent = "This review link is invalid or has expired.";
+      showBanner("We couldn't find anything for this link. Please ask for a fresh one.", "error");
+      return;
+    }
+    clientName = res.data.client.name;
+    posts = res.data.posts || [];
+    $("brand-sub").textContent = "Reviewing content for " + clientName + ".";
+    // Jump to the month of the earliest post, if any.
+    if (posts.length) {
+      var earliest = posts.map(function (p) { return p.date; }).sort()[0];
+      var parts = earliest.split("-");
+      view = new Date(+parts[0], +parts[1] - 1, 1);
+    }
     renderSummary();
     renderCalendar();
+  }
+
+  /* ---------------- Events ---------------- */
+  function wireCommon() {
+    $("prev-month").addEventListener("click", function () {
+      view = new Date(view.getFullYear(), view.getMonth() - 1, 1); renderCalendar();
+    });
+    $("next-month").addEventListener("click", function () {
+      view = new Date(view.getFullYear(), view.getMonth() + 1, 1); renderCalendar();
+    });
+    $("today-btn").addEventListener("click", function () {
+      var now = new Date(); view = new Date(now.getFullYear(), now.getMonth(), 1); renderCalendar();
+    });
+
+    // Review modal
+    $("modal-close").addEventListener("click", closeReview);
+    $("modal-overlay").addEventListener("click", function (e) { if (e.target === this) closeReview(); });
+    $("btn-approve").addEventListener("click", function () { submitReview("approved"); });
+    $("btn-request-changes").addEventListener("click", function () { submitReview("changes_requested"); });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { closeReview(); if (MODE === "admin") closeEditor(); }
+    });
+  }
+
+  function wireAdmin() {
+    $("client-select").addEventListener("change", function () {
+      currentClientId = this.value || null;
+      loadAdminPosts();
+    });
+    $("new-client-btn").addEventListener("click", newClient);
+    $("add-post-btn").addEventListener("click", function () { openEditor(null); });
+    $("copy-link-btn").addEventListener("click", copyReviewLink);
+
+    $("editor-close").addEventListener("click", closeEditor);
+    $("editor-overlay").addEventListener("click", function (e) { if (e.target === this) closeEditor(); });
+    $("editor-form").addEventListener("submit", saveEditor);
+    $("editor-delete").addEventListener("click", deletePost);
+
+    $("login-form").addEventListener("submit", handleLogin);
+    $("signout-btn").addEventListener("click", function () { db.auth.signOut(); });
+  }
+
+  /* ---------------- Init ---------------- */
+  async function init() {
+    wireCommon();
+    renderSummary();
+    renderCalendar();
+
+    if (MODE === "client") {
+      await enterClient();
+      return;
+    }
+
+    // Admin mode. onAuthStateChange fires an INITIAL_SESSION event on setup,
+    // so it covers the "already signed in" case too. We only react to the
+    // events that actually change who is signed in (ignore token refreshes).
+    wireAdmin();
+    db.auth.onAuthStateChange(function (event, session) {
+      if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
+      if (session) enterAdmin();
+      else exitAdmin();
+    });
   }
 
   if (document.readyState === "loading") {
