@@ -1,42 +1,119 @@
 # Content Approval Calendar
 
-A lightweight, dependency-free web app for reviewing and approving scheduled social
-content one month at a time. Built for the SocialFlare Creative content workflow.
+A lightweight, **no-build** web app for scheduling social posts and getting client
+sign-off, one month at a time. Built for the SocialFlare Creative content workflow
+and backed by [Supabase](https://supabase.com). Because it's plain HTML/CSS/JS, it
+deploys as-is on GitHub Pages.
 
-## Features
+There are two sides:
 
-- **Monthly calendar grid** — 7 columns, Sunday → Saturday, with previous/next navigation and a "Today" jump.
-- **Posts per day** — each day cell holds one or more scheduled posts.
-- **Post details** — platform tag (Facebook = blue, Instagram = pink), post type, a thumbnail placeholder, and the caption.
-- **Approval workflow** — every post has a status: **Pending** (gray), **Approved** (green), or **Changes Requested** (orange).
-- **Review actions** — click any post to open it, then **Approve** or **Request Changes** with an optional reviewer notes box.
-- **Summary bar** — live totals for posts, approved, pending, and changes requested.
-- **Clean & mobile-friendly** — responsive layout that works on phones and desktops.
-- **Persistent** — approval decisions and notes are saved in the browser via `localStorage`.
+- **Admin** (you) — sign in, manage clients, and add / edit / delete posts.
+- **Client review** — a shareable per-client link. Clients see only their own posts
+  in a read-only calendar and can **Approve** or **Request Changes** with notes.
+  They can't add, edit, or delete anything.
 
-## Usage
+Status colors are unchanged: **Pending** (gray), **Approved** (green),
+**Changes Requested** (orange).
 
-No build step or server required — it's plain HTML, CSS, and JavaScript.
+---
 
-1. Open `index.html` in any modern browser, **or**
-2. Serve the folder locally:
-   ```bash
-   python3 -m http.server 8000
-   # then visit http://localhost:8000
+## 1. One-time Supabase setup
+
+### a. Create the tables and security rules
+
+1. Open your Supabase project → **SQL Editor** → **New query**.
+2. Open [`supabase-setup.sql`](./supabase-setup.sql) from this repo, copy the whole
+   file into the editor, and click **Run**.
+
+That creates the `clients` and `posts` tables, turns on Row Level Security, and adds
+two token-scoped functions (`get_client_review`, `submit_review`) that power the
+client review link. It also inserts one "Sample Client" so you have something to test
+with (safe to delete later).
+
+### b. Create your admin login
+
+The admin side requires a signed-in Supabase user. Create yourself one:
+
+1. Supabase → **Authentication** → **Users** → **Add user** → **Create new user**.
+2. Enter your email + a password, and tick **Auto Confirm User** so you can sign in
+   right away.
+3. (Recommended) Supabase → **Authentication** → **Providers** → **Email** → turn
+   **off** "Allow new users to sign up", so only users you create can ever sign in.
+
+That's it — no keys to paste. The project URL and the public **anon** key are already
+wired into `app.js` (the anon key is safe to ship in the browser; all real protection
+comes from the Row Level Security policies in the SQL file).
+
+---
+
+## 2. Using the admin side
+
+Open the app (locally or your GitHub Pages URL) with **no query string**:
+
+```
+https://YOUR-USER.github.io/content-approval-calendar/
+```
+
+1. **Sign in** with the email/password you created above.
+2. Pick a **Client** from the dropdown, or click **+ New client** to add one.
+3. Click **+ Add post** (or click any day cell) to schedule a post. Choose the
+   date, platform (Facebook / Instagram), post type, caption, and an image URL.
+   It saves to Supabase immediately.
+4. Click an existing post to **edit** or **delete** it.
+5. The summary bar at the top reflects the selected client's real numbers.
+
+---
+
+## 3. Generating and testing a client review link
+
+1. On the admin side, select the client in the dropdown.
+2. Click **Copy review link** — the link is copied to your clipboard. It looks like:
+
+   ```
+   https://YOUR-USER.github.io/content-approval-calendar/?client=<token>
    ```
 
-The app ships with ~8 sample posts across June 2026 so you can see the workflow immediately.
+   The `<token>` is a long random value unique to that client (stored as
+   `review_token` in the `clients` table). Anyone with the link can review that
+   client's posts — and only that client's — without logging in.
 
-### Resetting sample data
+3. **Test it:** paste the link into a new private/incognito window. You should see
+   the client's name in the header and only their posts, with no admin toolbar.
+   Click a post, add a note if you like, and hit **Approve** or **Request Changes**.
+   Switch back to the admin view and reload — the new status and notes are there.
 
-State is stored under the `cac.posts.v1` key in `localStorage`. To restore the
-original sample posts, clear your browser's site data (or run
-`localStorage.removeItem('cac.posts.v1')` in the console) and reload.
+To **revoke** a link, change that client's `review_token` in the Supabase Table
+Editor (or delete the client). The old link stops working immediately.
+
+---
+
+## 4. Running locally
+
+No server is required, but a tiny static server avoids browser file-URL quirks:
+
+```bash
+python3 -m http.server 8000
+# then visit http://localhost:8000
+```
+
+---
 
 ## Files
 
-| File         | Purpose                                  |
-| ------------ | ---------------------------------------- |
-| `index.html` | Markup and modal structure               |
-| `styles.css` | Styling, color tokens, responsive layout |
-| `app.js`     | Calendar rendering, state, and approval logic |
+| File                 | Purpose                                              |
+| -------------------- | ---------------------------------------------------- |
+| `index.html`         | Markup: calendar, admin toolbar, modals              |
+| `styles.css`         | Styling, color tokens, responsive layout             |
+| `app.js`             | Calendar rendering + Supabase admin/client logic     |
+| `supabase-setup.sql` | One-time SQL: tables, RLS policies, review functions  |
+
+## How the security model works
+
+- **Admin** is any authenticated Supabase user. RLS policies grant signed-in users
+  full read/write on `clients` and `posts`.
+- **Clients are anonymous** and get **no** direct table access. The review link calls
+  two `SECURITY DEFINER` functions that take the link token, verify it, and only ever
+  return or modify that one client's data — and `submit_review` can change *only* the
+  `status` and `reviewer_notes` columns. So a client link can't read other clients,
+  can't edit captions/dates, and can't delete anything, even though the anon key is
+  public.

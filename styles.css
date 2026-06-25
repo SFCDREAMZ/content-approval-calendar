@@ -50,9 +50,67 @@ html, body {
 }
 .brand-text h1 { font-size: 1.15rem; margin: 0; font-weight: 700; }
 .brand-text p { margin: 2px 0 0; font-size: 0.85rem; color: var(--text-muted); }
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.user-email { font-size: 0.82rem; color: var(--text-muted); }
 
 /* ---------- Layout ---------- */
 .app-main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+/* ---------- Admin toolbar ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.toolbar-group { display: flex; align-items: center; gap: 10px; }
+.toolbar-right { margin-left: auto; }
+.toolbar-label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+.toolbar-select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--text);
+  min-width: 180px;
+}
+.ghost-btn, .primary-btn {
+  border-radius: 9px;
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, background 0.15s, border-color 0.15s;
+}
+.ghost-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.ghost-btn:hover { background: var(--pending-soft); border-color: #d0d5dd; }
+.primary-btn {
+  border: none;
+  background: var(--facebook);
+  color: #fff;
+}
+.primary-btn:hover { filter: brightness(0.95); }
+
+/* ---------- Banner ---------- */
+.banner {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  font-size: 0.85rem;
+  background: var(--pending-soft);
+  color: #475467;
+  border: 1px solid var(--border);
+}
+.banner-ok    { background: var(--approved-soft); color: var(--approved); border-color: #b6ecd0; }
+.banner-error { background: var(--changes-soft);  color: var(--changes);  border-color: #f5c97f; }
 
 /* ---------- Summary bar ---------- */
 .summary {
@@ -272,6 +330,7 @@ html, body {
 }
 .modal-thumb.platform-facebook  { background: linear-gradient(135deg, #1877f2, #0b5ed7); }
 .modal-thumb.platform-instagram { background: linear-gradient(135deg, #f9ce34, #ee2a7b 55%, #6228d7); }
+.modal-thumb[style*="background-image"] { background-size: cover; background-position: center; }
 .modal-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .modal-date { font-size: 0.82rem; color: var(--text-muted); margin: 0 0 8px; font-weight: 500; }
 .modal-caption { font-size: 0.95rem; line-height: 1.5; margin: 0 0 18px; }
@@ -300,8 +359,35 @@ html, body {
   transition: filter 0.15s;
 }
 .btn:hover { filter: brightness(0.95); }
+.btn:disabled { opacity: 0.6; cursor: default; }
 .btn-approve { background: var(--approved); color: #fff; }
 .btn-changes { background: var(--changes-soft); color: var(--changes); border: 1px solid #f5c97f; }
+.btn-delete  { background: var(--changes-soft); color: var(--changes); border: 1px solid #f5c97f; flex: 0 0 auto; }
+
+/* ---------- Editor / login form ---------- */
+.modal-narrow { max-width: 380px; }
+.editor-title { margin: 0 0 16px; font-size: 1.1rem; font-weight: 700; }
+.editor-actions { margin-top: 4px; }
+.field { margin-bottom: 14px; }
+.field-row { display: flex; gap: 12px; }
+.field-row .field { flex: 1; }
+.text-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.88rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.text-input:focus { outline: none; border-color: var(--facebook); box-shadow: 0 0 0 3px var(--facebook-soft); }
+.login-hint { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 16px; }
+.login-error { font-size: 0.82rem; color: var(--changes); margin: 0 0 12px; }
+
+/* ---------- Admin clickable day cells ---------- */
+.day-cell.is-clickable { cursor: pointer; }
+.day-cell.is-clickable:hover { background: #fafbff; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
