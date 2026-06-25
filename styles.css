@@ -24,6 +24,12 @@
 
 * { box-sizing: border-box; }
 
+/* The HTML `hidden` attribute must win over component display rules
+ * (.modal-overlay/.toolbar/.header-actions all set `display`, which would
+ * otherwise override the UA `[hidden] { display: none }` and leave modals
+ * and toolbars permanently visible). Keep this authoritative. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
