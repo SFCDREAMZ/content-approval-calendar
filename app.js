@@ -395,7 +395,14 @@
   }
 
   /* ---------------- Admin: auth ---------------- */
-  function showLogin(show) { $("login-overlay").hidden = !show; }
+  function showLogin(show) {
+    $("login-overlay").hidden = !show;
+    if (show) {
+      var err = $("login-error");
+      if (err) err.hidden = true;
+      $("login-submit").disabled = false;
+    }
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -442,6 +449,8 @@
     $("login-submit").disabled = false; // ensure the button isn't stuck disabled
     $("admin-toolbar").hidden = false;
     $("header-actions").hidden = false;
+    $("signin-btn").hidden = true;       // logged in → offer Sign out, not Sign in
+    $("signout-btn").hidden = false;
     var user = session ? session.user : null;
     $("user-email").textContent = user ? user.email : "";
     $("brand-sub").textContent = "Admin — manage clients and scheduled posts.";
@@ -451,8 +460,12 @@
 
   function exitAdmin() {
     $("admin-toolbar").hidden = true;
-    $("header-actions").hidden = true;
+    $("header-actions").hidden = false;  // keep the header bar so Sign in is reachable
+    $("signin-btn").hidden = false;
+    $("signout-btn").hidden = true;
+    $("user-email").textContent = "";
     posts = []; clients = []; currentClientId = null;
+    $("brand-sub").textContent = "Sign in to manage the calendar.";
     renderSummary(); renderCalendar();
     showLogin(true);
   }
@@ -502,7 +515,10 @@
     $("btn-request-changes").addEventListener("click", function () { submitReview("changes_requested"); });
 
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") { closeReview(); if (MODE === "admin") closeEditor(); }
+      if (e.key === "Escape") {
+        closeReview();
+        if (MODE === "admin") { closeEditor(); showLogin(false); }
+      }
     });
   }
 
@@ -521,6 +537,9 @@
     $("editor-delete").addEventListener("click", deletePost);
 
     $("login-form").addEventListener("submit", handleLogin);
+    $("login-close").addEventListener("click", function () { showLogin(false); });
+    $("login-overlay").addEventListener("click", function (e) { if (e.target === this) showLogin(false); });
+    $("signin-btn").addEventListener("click", function () { showLogin(true); });
     $("signout-btn").addEventListener("click", function () { db.auth.signOut(); });
   }
 
