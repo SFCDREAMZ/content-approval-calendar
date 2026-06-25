@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Content Approval Calendar</title>
+  <meta name="description" content="Review and approve scheduled social content for the month." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">SF</span>
+      <div class="brand-text">
+        <h1>Content Approval Calendar</h1>
+        <p>Review scheduled posts and sign off for the month.</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- Summary bar -->
+    <section class="summary" aria-label="Approval summary">
+      <div class="summary-card">
+        <span class="summary-value" id="stat-total">0</span>
+        <span class="summary-label">Total posts</span>
+      </div>
+      <div class="summary-card is-approved">
+        <span class="summary-value" id="stat-approved">0</span>
+        <span class="summary-label">Approved</span>
+      </div>
+      <div class="summary-card is-pending">
+        <span class="summary-value" id="stat-pending">0</span>
+        <span class="summary-label">Pending</span>
+      </div>
+      <div class="summary-card is-changes">
+        <span class="summary-value" id="stat-changes">0</span>
+        <span class="summary-label">Changes requested</span>
+      </div>
+    </section>
+
+    <!-- Month navigation -->
+    <section class="month-nav" aria-label="Month navigation">
+      <button class="nav-btn" id="prev-month" aria-label="Previous month">&#8592;</button>
+      <h2 class="month-title" id="month-title">Month Year</h2>
+      <button class="nav-btn" id="next-month" aria-label="Next month">&#8594;</button>
+      <button class="today-btn" id="today-btn">Today</button>
+    </section>
+
+    <!-- Calendar -->
+    <section class="calendar" aria-label="Calendar">
+      <div class="weekday-row" aria-hidden="true">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+    </section>
+  </main>
+
+  <!-- Post detail / approval modal -->
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-caption">
+      <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+
+      <div class="modal-thumb" id="modal-thumb" aria-hidden="true"></div>
+
+      <div class="modal-meta">
+        <span class="platform-tag" id="modal-platform">Platform</span>
+        <span class="type-tag" id="modal-type">Type</span>
+        <span class="status-pill" id="modal-status">Status</span>
+      </div>
+
+      <p class="modal-date" id="modal-date">Date</p>
+      <p class="modal-caption" id="modal-caption">Caption</p>
+
+      <label class="notes-label" for="modal-notes">Reviewer notes</label>
+      <textarea class="notes-input" id="modal-notes" rows="3"
+        placeholder="Add notes for the team (optional for approvals, helpful for change requests)…"></textarea>
+
+      <div class="modal-actions">
+        <button class="btn btn-changes" id="btn-request-changes">Request Changes</button>
+        <button class="btn btn-approve" id="btn-approve">Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
