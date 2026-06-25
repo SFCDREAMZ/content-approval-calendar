@@ -416,12 +416,33 @@
     }
   }
 
-  async function enterAdmin() {
+  // Tracks the rendered auth view so applyAuth() can stay idempotent and we
+  // never double-load (onAuthStateChange + the initial getSession can race).
+  var authView = null; // "in" | "out" | null
+
+  // IMPORTANT: never call a supabase.auth.* method (getSession, etc.) from
+  // inside the onAuthStateChange callback — the client holds an auth lock
+  // while dispatching it, so a nested auth call deadlocks (sign-in never
+  // resolves, UI never updates). We take the session as an argument instead,
+  // and applyAuth() is always invoked deferred / outside the callback.
+  function applyAuth(session) {
+    var next = session ? "in" : "out";
+    if (next === authView) {
+      // Already showing the right view; just keep the email fresh.
+      if (session) $("user-email").textContent = session.user ? session.user.email : "";
+      return;
+    }
+    authView = next;
+    if (session) enterAdmin(session);
+    else exitAdmin();
+  }
+
+  async function enterAdmin(session) {
     showLogin(false);
+    $("login-submit").disabled = false; // ensure the button isn't stuck disabled
     $("admin-toolbar").hidden = false;
     $("header-actions").hidden = false;
-    var sess = await db.auth.getSession();
-    var user = sess.data.session ? sess.data.session.user : null;
+    var user = session ? session.user : null;
     $("user-email").textContent = user ? user.email : "";
     $("brand-sub").textContent = "Admin — manage clients and scheduled posts.";
     await loadClients();
@@ -514,15 +535,29 @@
       return;
     }
 
-    // Admin mode. onAuthStateChange fires an INITIAL_SESSION event on setup,
-    // so it covers the "already signed in" case too. We only react to the
-    // events that actually change who is signed in (ignore token refreshes).
+    // Admin mode.
     wireAdmin();
+
+    // React to sign-in / sign-out. onAuthStateChange also fires an
+    // INITIAL_SESSION event on setup, so a returning logged-in user is routed
+    // straight into the admin view. The callback body is deferred with
+    // setTimeout(…, 0) so it runs OUTSIDE the auth-lock context — calling
+    // supabase methods (loadClients, etc.) directly inside the callback would
+    // deadlock and leave the sign-in button stuck.
     db.auth.onAuthStateChange(function (event, session) {
       if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
-      if (session) enterAdmin();
-      else exitAdmin();
+      setTimeout(function () { applyAuth(session); }, 0);
     });
+
+    // Fallback: explicitly check for an existing session on load, in case
+    // INITIAL_SESSION hasn't fired yet. applyAuth() is idempotent, so this
+    // races safely with the listener above.
+    try {
+      var sess = await db.auth.getSession();
+      applyAuth(sess.data.session);
+    } catch (e) {
+      applyAuth(null);
+    }
   }
 
   if (document.readyState === "loading") {
