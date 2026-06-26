@@ -9,8 +9,9 @@ There are two sides:
 
 - **Admin** (you) — sign in, manage clients, and add / edit / delete posts.
 - **Client review** — a shareable per-client link. Clients see only their own posts
-  in a read-only calendar and can **Approve** or **Request Changes** with notes.
-  They can't add, edit, or delete anything.
+  (images and playable videos) and can **Approve** or **Request Changes** with notes.
+  On phones it's a scrollable, big-tap-target list grouped by date; on tablet/desktop
+  it's the calendar grid. They can't add, edit, or delete anything.
 
 Status colors are unchanged: **Pending** (gray), **Approved** (green),
 **Changes Requested** (orange).
@@ -27,8 +28,9 @@ Status colors are unchanged: **Pending** (gray), **Approved** (green),
 
 That creates the `clients` and `posts` tables, turns on Row Level Security, and adds
 two token-scoped functions (`get_client_review`, `submit_review`) that power the
-client review link. It also inserts one "Sample Client" so you have something to test
-with (safe to delete later).
+client review link. It also creates the public **`post-media`** Storage bucket and its
+policies (public read; insert/update/delete only for signed-in admins), and inserts one
+"Sample Client" so you have something to test with (safe to delete later).
 
 ### b. Create your admin login
 
@@ -57,8 +59,11 @@ https://YOUR-USER.github.io/content-approval-calendar/
 1. **Sign in** with the email/password you created above.
 2. Pick a **Client** from the dropdown, or click **+ New client** to add one.
 3. Click **+ Add post** (or click any day cell) to schedule a post. Choose the
-   date, platform (Facebook / Instagram), post type, caption, and an image URL.
-   It saves to Supabase immediately.
+   date, platform (Facebook / Instagram), post type, and caption. For **media**,
+   drag & drop (or browse to) an image (JPG, PNG, WEBP, GIF) or video (MP4, MOV,
+   WEBM) — it uploads to the `post-media` bucket with a live progress bar and shows
+   a thumbnail / video preview. Media is optional, and you can still paste a URL as
+   a fallback. It saves to Supabase immediately.
 4. Click an existing post to **edit** or **delete** it.
 5. The summary bar at the top reflects the selected client's real numbers.
 

@@ -24,12 +24,28 @@ create table if not exists public.posts (
   platform       text not null check (platform in ('facebook','instagram')),
   post_type      text not null,
   caption        text not null default '',
-  image_url      text,
+  image_url      text,                      -- legacy; kept populated for images
+  media_url      text,                      -- public URL of the uploaded image OR video
+  media_type     text check (media_type in ('image','video')),
   status         text not null default 'pending'
                    check (status in ('pending','approved','changes_requested')),
   reviewer_notes text not null default '',
   created_at     timestamptz not null default now()
 );
+
+-- If the posts table already existed, add the new media columns in place.
+alter table public.posts add column if not exists media_url  text;
+alter table public.posts add column if not exists media_type text;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'posts_media_type_check'
+  ) then
+    alter table public.posts
+      add constraint posts_media_type_check
+      check (media_type is null or media_type in ('image','video'));
+  end if;
+end $$;
 
 create index if not exists posts_client_id_idx on public.posts (client_id);
 create index if not exists posts_date_idx      on public.posts (date);
@@ -89,7 +105,8 @@ begin
   select coalesce(json_agg(row_to_json(p) order by p.date, p.created_at), '[]'::json)
     into v_posts
   from (
-    select id, client_id, date, platform, post_type, caption, image_url,
+    select id, client_id, date, platform, post_type, caption,
+           image_url, media_url, media_type,
            status, reviewer_notes, created_at
     from public.posts
     where client_id = v_client.id
@@ -145,6 +162,49 @@ $$;
 -- Allow anonymous (and signed-in) visitors to call the review RPCs.
 grant execute on function public.get_client_review(text)              to anon, authenticated;
 grant execute on function public.submit_review(text, uuid, text, text) to anon, authenticated;
+
+-- ----------------------------------------------------------------
+--  Storage: the "post-media" bucket (images & videos)
+--
+--  Reads are PUBLIC (anyone with the URL can view). Writes (insert),
+--  updates, and deletes require a signed-in Supabase Auth user — i.e.
+--  the admin. Anonymous review-link visitors can view media but never
+--  upload or delete.
+-- ----------------------------------------------------------------
+
+-- Create the public bucket (id == name). Re-running just keeps it public.
+insert into storage.buckets (id, name, public)
+values ('post-media', 'post-media', true)
+on conflict (id) do update set public = true;
+
+-- Public read of objects in this bucket.
+drop policy if exists "post-media public read" on storage.objects;
+create policy "post-media public read"
+  on storage.objects for select
+  to public
+  using (bucket_id = 'post-media');
+
+-- Authenticated admin can upload (insert) into this bucket.
+drop policy if exists "post-media authenticated insert" on storage.objects;
+create policy "post-media authenticated insert"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'post-media');
+
+-- Authenticated admin can overwrite (update) objects in this bucket.
+drop policy if exists "post-media authenticated update" on storage.objects;
+create policy "post-media authenticated update"
+  on storage.objects for update
+  to authenticated
+  using (bucket_id = 'post-media')
+  with check (bucket_id = 'post-media');
+
+-- Authenticated admin can delete objects in this bucket.
+drop policy if exists "post-media authenticated delete" on storage.objects;
+create policy "post-media authenticated delete"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'post-media');
 
 -- ----------------------------------------------------------------
 --  Optional: a sample client to get you started (safe to delete).
