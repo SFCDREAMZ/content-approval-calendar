@@ -18,15 +18,21 @@
   var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   /* ---------------- Constants ---------------- */
+  // Order here drives the platform dropdown.
   var PLATFORMS = {
-    facebook:  { label: "Facebook",  icon: "f" },
-    instagram: { label: "Instagram", icon: "◉" }
+    linkedin:  { label: "LinkedIn",  icon: "in" },
+    tiktok:    { label: "TikTok",    icon: "♪"  },
+    pinterest: { label: "Pinterest", icon: "P"  },
+    instagram: { label: "Instagram", icon: "◉"  },
+    facebook:  { label: "Facebook",  icon: "f"  },
+    gbp:       { label: "Google Business", icon: "G" }
   };
 
   var STATUSES = {
     pending:            { label: "Pending",           cls: "status-pending"  },
     approved:           { label: "Approved",          cls: "status-approved" },
-    changes_requested:  { label: "Changes Requested", cls: "status-changes"  }
+    changes_requested:  { label: "Changes Requested", cls: "status-changes"  },
+    posted:             { label: "Posted",            cls: "status-posted"   }
   };
 
   var MONTH_NAMES = ["January","February","March","April","May","June",
@@ -45,6 +51,7 @@
   view = new Date(view.getFullYear(), view.getMonth(), 1);
   var activeId  = null;         // post open in the review modal
   var editingId = null;         // post open in the editor (null = adding)
+  var adminView = "calendar";   // admin: "calendar" | "queue"
 
   // Editor media state. Precedence on save: pendingFile > pasted URL > existing.
   var pendingFile       = null; // File chosen but not yet uploaded
@@ -76,6 +83,45 @@
     var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
     var weekdays = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
     return weekdays[d.getDay()] + ", " + MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
+
+  // Format an ISO timestamp (publish_at) as a friendly local date + time.
+  function formatPublishAt(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var h = d.getHours();
+    var ampm = h >= 12 ? "PM" : "AM";
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() +
+      " · " + h12 + ":" + pad(d.getMinutes()) + " " + ampm;
+  }
+
+  // Short time only (e.g. "9:30 AM"), for compact calendar chips.
+  function formatPublishTime(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var h = d.getHours();
+    var ampm = h >= 12 ? "PM" : "AM";
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + ":" + pad(d.getMinutes()) + " " + ampm;
+  }
+
+  // Convert an ISO timestamp into the value a <input type="datetime-local">
+  // expects (local "YYYY-MM-DDTHH:MM"), and back.
+  function isoToLocalInput(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function localInputToIso(val) {
+    if (!val) return null;
+    var d = new Date(val);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
   }
 
   /* ---------------- Media helpers ---------------- */
@@ -144,16 +190,19 @@
 
   /* ---------------- Rendering ---------------- */
   function renderSummary() {
-    var total = posts.length, approved = 0, pending = 0, changes = 0;
+    var total = posts.length, approved = 0, pending = 0, changes = 0, posted = 0;
     posts.forEach(function (p) {
       if (p.status === "approved") approved++;
       else if (p.status === "changes_requested") changes++;
+      else if (p.status === "posted") posted++;
       else pending++;
     });
     $("stat-total").textContent    = total;
     $("stat-approved").textContent = approved;
     $("stat-pending").textContent  = pending;
     $("stat-changes").textContent  = changes;
+    var postedEl = $("stat-posted");
+    if (postedEl) postedEl.textContent = posted;
   }
 
   function renderCalendar() {
@@ -240,6 +289,13 @@
       chip.appendChild(buildMedia(mUrl, postMediaType(p), { cls: "chip-media" }));
     }
 
+    if (p.publish_at) {
+      var when = document.createElement("span");
+      when.className = "post-time";
+      when.textContent = "🕒 " + formatPublishTime(p.publish_at);
+      chip.appendChild(when);
+    }
+
     var cap = document.createElement("span");
     cap.className = "post-caption";
     cap.textContent = p.caption;
@@ -285,7 +341,9 @@
     statusEl.className = "status-pill " + st.cls;
     statusEl.textContent = st.label;
 
-    $("modal-date").textContent = formatLongDate(p.date);
+    var dateLine = formatLongDate(p.date);
+    if (p.publish_at) dateLine += "  ·  Publishes " + formatPublishAt(p.publish_at);
+    $("modal-date").textContent = dateLine;
     $("modal-caption").textContent = p.caption;
     $("modal-notes").value = p.reviewer_notes || "";
 
@@ -379,6 +437,13 @@
     meta.appendChild(pill);
     card.appendChild(meta);
 
+    if (p.publish_at) {
+      var when = document.createElement("p");
+      when.className = "review-card-when";
+      when.textContent = "🕒 Publishes " + formatPublishAt(p.publish_at);
+      card.appendChild(when);
+    }
+
     if (p.caption) {
       var cap = document.createElement("p");
       cap.className = "review-card-caption";
@@ -429,9 +494,11 @@
 
     $("editor-title").textContent = p ? "Edit post" : "Add post";
     $("f-date").value     = p ? p.date : (presetDate || dateKey(new Date()));
-    $("f-platform").value = p ? p.platform : "facebook";
+    $("f-platform").value = p ? p.platform : "linkedin";
     $("f-type").value     = p ? p.post_type : "Photo";
     $("f-caption").value  = p ? p.caption : "";
+    $("f-publish").value  = p ? isoToLocalInput(p.publish_at) : "";
+    if ($("f-status")) $("f-status").value = p ? p.status : "pending";
     $("editor-delete").hidden = !p;
 
     // Reset media controls, then show any existing media as a preview.
@@ -587,6 +654,7 @@
       var record = {
         client_id:  currentClientId,
         date:       $("f-date").value,
+        publish_at: localInputToIso($("f-publish").value),
         platform:   $("f-platform").value,
         post_type:  $("f-type").value,
         caption:    $("f-caption").value.trim(),
@@ -595,6 +663,7 @@
         // Keep the legacy column populated for images so older readers still work.
         image_url:  mediaType === "image" ? mediaUrl : null
       };
+      if ($("f-status")) record.status = $("f-status").value;
 
       if (editingId) {
         var up = await db.from("posts").update(record).eq("id", editingId);
@@ -623,6 +692,189 @@
       await loadAdminPosts();
     } catch (err) {
       alert("Could not delete the post: " + (err.message || err));
+    }
+  }
+
+  /* ---------------- Admin: approved & scheduled queue ---------------- */
+  // Switch the admin work area between the calendar and the posting queue.
+  function setAdminView(v) {
+    adminView = v;
+    var isQueue = v === "queue";
+    $("calendar-view").hidden = isQueue;
+    $("queue-view").hidden = !isQueue;
+    var tabCal = $("tab-calendar"), tabQ = $("tab-queue");
+    if (tabCal) tabCal.classList.toggle("is-active", !isQueue);
+    if (tabQ) tabQ.classList.toggle("is-active", isQueue);
+    if (isQueue) renderQueue();
+  }
+
+  // The daily worksheet: every Approved (not yet Posted) post, soonest first.
+  function renderQueue() {
+    var host = $("queue-list");
+    if (!host) return;
+    host.innerHTML = "";
+
+    var queued = posts.filter(function (p) { return p.status === "approved"; });
+    queued.sort(function (a, b) {
+      // Posts with a publish time come first (soonest → latest); undated last.
+      var ta = a.publish_at ? new Date(a.publish_at).getTime() : Infinity;
+      var tb = b.publish_at ? new Date(b.publish_at).getTime() : Infinity;
+      if (ta !== tb) return ta - tb;
+      return (a.date || "").localeCompare(b.date || "");
+    });
+
+    $("queue-count").textContent = queued.length +
+      (queued.length === 1 ? " post ready to publish" : " posts ready to publish");
+
+    if (!queued.length) {
+      host.innerHTML = '<p class="queue-empty">No approved posts waiting. ' +
+        'Once a client approves a post, it appears here as your posting worksheet.</p>';
+      return;
+    }
+
+    queued.forEach(function (p) { host.appendChild(buildQueueCard(p)); });
+  }
+
+  function buildQueueCard(p) {
+    var card = document.createElement("article");
+    card.className = "queue-card platform-" + p.platform;
+
+    // Media (image thumbnail or playable video)
+    var url = postMediaUrl(p);
+    var media = document.createElement("div");
+    media.className = "queue-card-media";
+    if (url) {
+      media.appendChild(buildMedia(url, postMediaType(p), { controls: true, alt: p.caption || "" }));
+    } else {
+      media.classList.add("is-empty");
+      media.textContent = "No media";
+    }
+    card.appendChild(media);
+
+    // Body
+    var body = document.createElement("div");
+    body.className = "queue-card-body";
+
+    var meta = document.createElement("div");
+    meta.className = "queue-card-meta";
+    var plat = document.createElement("span");
+    plat.className = "platform-tag platform-" + p.platform;
+    plat.textContent = (PLATFORMS[p.platform] || {}).label || p.platform;
+    meta.appendChild(plat);
+    var type = document.createElement("span");
+    type.className = "type-tag";
+    type.textContent = p.post_type;
+    meta.appendChild(type);
+    body.appendChild(meta);
+
+    var when = document.createElement("p");
+    when.className = "queue-card-when";
+    when.textContent = p.publish_at
+      ? "🕒 " + formatPublishAt(p.publish_at)
+      : "🕒 No publish time set · " + formatLongDate(p.date);
+    body.appendChild(when);
+
+    var cap = document.createElement("p");
+    cap.className = "queue-card-caption";
+    cap.textContent = p.caption || "(no caption)";
+    body.appendChild(cap);
+
+    // Actions
+    var actions = document.createElement("div");
+    actions.className = "queue-card-actions";
+
+    var copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "ghost-btn queue-btn";
+    copyBtn.textContent = "Copy caption";
+    copyBtn.addEventListener("click", function () { copyCaption(p, copyBtn); });
+    actions.appendChild(copyBtn);
+
+    var dlBtn = document.createElement("button");
+    dlBtn.type = "button";
+    dlBtn.className = "ghost-btn queue-btn";
+    dlBtn.textContent = "Download media";
+    dlBtn.disabled = !url;
+    if (url) dlBtn.addEventListener("click", function () { downloadMedia(p, dlBtn); });
+    actions.appendChild(dlBtn);
+
+    var postedBtn = document.createElement("button");
+    postedBtn.type = "button";
+    postedBtn.className = "primary-btn queue-btn queue-btn-posted";
+    postedBtn.textContent = "Mark as Posted";
+    postedBtn.addEventListener("click", function () { markPosted(p, postedBtn); });
+    actions.appendChild(postedBtn);
+
+    body.appendChild(actions);
+    card.appendChild(body);
+    return card;
+  }
+
+  function copyCaption(p, btn) {
+    var text = p.caption || "";
+    var done = function () {
+      var orig = btn.textContent;
+      btn.textContent = "Copied ✓";
+      setTimeout(function () { btn.textContent = orig; }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { window.prompt("Copy caption:", text); });
+    } else {
+      window.prompt("Copy caption:", text);
+    }
+  }
+
+  // Fetch the media as a blob so the browser downloads (not navigates to) it.
+  async function downloadMedia(p, btn) {
+    var url = postMediaUrl(p);
+    if (!url) return;
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Downloading…";
+    try {
+      var resp = await fetch(url);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var blob = await resp.blob();
+      var objUrl = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filenameFor(p, url);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(objUrl); }, 4000);
+      btn.textContent = "Downloaded ✓";
+    } catch (err) {
+      // Fall back to opening in a new tab if a cross-origin fetch is blocked.
+      window.open(url, "_blank");
+      btn.textContent = "Opened ↗";
+    } finally {
+      setTimeout(function () { btn.textContent = orig; btn.disabled = false; }, 1800);
+    }
+  }
+
+  function filenameFor(p, url) {
+    var ext = extOf(url) || (postMediaType(p) === "video" ? "mp4" : "jpg");
+    var slug = (p.platform || "post") + "-" + (p.date || "");
+    return slug.replace(/[^a-z0-9-]/gi, "") + "." + ext;
+  }
+
+  async function markPosted(p, btn) {
+    if (!window.confirm("Mark this post as Posted? It will leave the queue.")) return;
+    btn.disabled = true;
+    var orig = btn.textContent;
+    btn.textContent = "Saving…";
+    try {
+      var res = await db.from("posts").update({ status: "posted" }).eq("id", p.id);
+      if (res.error) throw res.error;
+      p.status = "posted";
+      renderSummary();
+      renderCalendar();
+      renderQueue();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = orig;
+      alert("Could not mark as posted: " + (err.message || err));
     }
   }
 
@@ -673,6 +925,7 @@
     clientName = c ? c.name : "";
     showBanner("");
     renderSummary(); renderCalendar();
+    if (adminView === "queue") renderQueue();
   }
 
   async function newClient() {
@@ -762,6 +1015,8 @@
     showLogin(false);
     $("login-submit").disabled = false; // ensure the button isn't stuck disabled
     $("admin-toolbar").hidden = false;
+    $("view-tabs").hidden = false;
+    setAdminView("calendar");
     $("header-actions").hidden = false;
     $("signin-btn").hidden = true;       // logged in → offer Sign out, not Sign in
     $("signout-btn").hidden = false;
@@ -774,6 +1029,8 @@
 
   function exitAdmin() {
     $("admin-toolbar").hidden = true;
+    $("view-tabs").hidden = true;
+    setAdminView("calendar");
     $("header-actions").hidden = false;  // keep the header bar so Sign in is reachable
     $("signin-btn").hidden = false;
     $("signout-btn").hidden = true;
@@ -845,6 +1102,9 @@
     $("new-client-btn").addEventListener("click", newClient);
     $("add-post-btn").addEventListener("click", function () { openEditor(null); });
     $("copy-link-btn").addEventListener("click", copyReviewLink);
+
+    $("tab-calendar").addEventListener("click", function () { setAdminView("calendar"); });
+    $("tab-queue").addEventListener("click", function () { setAdminView("queue"); });
 
     $("editor-close").addEventListener("click", closeEditor);
     $("editor-overlay").addEventListener("click", function (e) { if (e.target === this) closeEditor(); });

@@ -61,22 +61,41 @@
         <span class="summary-value" id="stat-changes">0</span>
         <span class="summary-label">Changes requested</span>
       </div>
-    </section>
-
-    <!-- Month navigation -->
-    <section class="month-nav" aria-label="Month navigation">
-      <button class="nav-btn" id="prev-month" aria-label="Previous month">&#8592;</button>
-      <h2 class="month-title" id="month-title">Month Year</h2>
-      <button class="nav-btn" id="next-month" aria-label="Next month">&#8594;</button>
-      <button class="today-btn" id="today-btn">Today</button>
-    </section>
-
-    <!-- Calendar -->
-    <section class="calendar" aria-label="Calendar">
-      <div class="weekday-row" aria-hidden="true">
-        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      <div class="summary-card is-posted">
+        <span class="summary-value" id="stat-posted">0</span>
+        <span class="summary-label">Posted</span>
       </div>
-      <div class="calendar-grid" id="calendar-grid"></div>
+    </section>
+
+    <!-- View tabs (admin only): Calendar vs Approved & Scheduled queue -->
+    <section class="view-tabs" id="view-tabs" aria-label="Switch view" hidden>
+      <button class="view-tab is-active" id="tab-calendar" type="button">Calendar</button>
+      <button class="view-tab" id="tab-queue" type="button">Approved &amp; Scheduled</button>
+    </section>
+
+    <!-- Calendar view (month nav + grid) -->
+    <div id="calendar-view">
+      <!-- Month navigation -->
+      <section class="month-nav" aria-label="Month navigation">
+        <button class="nav-btn" id="prev-month" aria-label="Previous month">&#8592;</button>
+        <h2 class="month-title" id="month-title">Month Year</h2>
+        <button class="nav-btn" id="next-month" aria-label="Next month">&#8594;</button>
+        <button class="today-btn" id="today-btn">Today</button>
+      </section>
+
+      <!-- Calendar -->
+      <section class="calendar" aria-label="Calendar">
+        <div class="weekday-row" aria-hidden="true">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+        <div class="calendar-grid" id="calendar-grid"></div>
+      </section>
+    </div>
+
+    <!-- Approved & Scheduled queue (admin only) -->
+    <section class="queue-view" id="queue-view" aria-label="Approved and scheduled posts" hidden>
+      <p class="queue-count" id="queue-count">0 posts ready to publish</p>
+      <div class="queue-list" id="queue-list"></div>
     </section>
 
     <!-- Mobile review list (client mode, small screens) -->
@@ -124,22 +143,43 @@
         <div class="field">
           <label class="notes-label" for="f-platform">Platform</label>
           <select class="text-input" id="f-platform">
-            <option value="facebook">Facebook</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="tiktok">TikTok</option>
+            <option value="pinterest">Pinterest</option>
             <option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option>
+            <option value="gbp">Google Business Profile</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label class="notes-label" for="f-type">Post type</label>
+          <select class="text-input" id="f-type">
+            <option>Photo</option>
+            <option>Video</option>
+            <option>Reel</option>
+            <option>Carousel</option>
+            <option>Story</option>
+            <option>Link</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="notes-label" for="f-status">Status</label>
+          <select class="text-input" id="f-status">
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="changes_requested">Changes Requested</option>
+            <option value="posted">Posted</option>
           </select>
         </div>
       </div>
 
       <div class="field">
-        <label class="notes-label" for="f-type">Post type</label>
-        <select class="text-input" id="f-type">
-          <option>Photo</option>
-          <option>Video</option>
-          <option>Reel</option>
-          <option>Carousel</option>
-          <option>Story</option>
-          <option>Link</option>
-        </select>
+        <label class="notes-label" for="f-publish">Publish date &amp; time
+          <span class="field-optional">(when it should go live)</span></label>
+        <input class="text-input" type="datetime-local" id="f-publish" />
       </div>
 
       <div class="field">

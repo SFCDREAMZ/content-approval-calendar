@@ -1,6 +1,9 @@
 -- ============================================================
 --  Content Approval Calendar — Supabase schema & security
 --  Run this whole file once in: Supabase → SQL Editor → New query → Run
+--
+--  Written idempotently: every statement is safe to re-run, so you can
+--  paste the whole file again at any time to apply schema upgrades.
 -- ============================================================
 
 -- ----------------------------------------------------------------
@@ -21,21 +24,24 @@ create table if not exists public.posts (
   id             uuid primary key default gen_random_uuid(),
   client_id      uuid not null references public.clients(id) on delete cascade,
   date           date not null,
-  platform       text not null check (platform in ('facebook','instagram')),
+  publish_at     timestamptz,               -- when the post should go live (separate from created_at)
+  platform       text not null,             -- constraint added/maintained below
   post_type      text not null,
   caption        text not null default '',
   image_url      text,                      -- legacy; kept populated for images
   media_url      text,                      -- public URL of the uploaded image OR video
   media_type     text check (media_type in ('image','video')),
-  status         text not null default 'pending'
-                   check (status in ('pending','approved','changes_requested')),
+  status         text not null default 'pending',  -- constraint added/maintained below
   reviewer_notes text not null default '',
   created_at     timestamptz not null default now()
 );
 
--- If the posts table already existed, add the new media columns in place.
+-- If the posts table already existed, add the newer columns in place.
+alter table public.posts add column if not exists publish_at timestamptz;
 alter table public.posts add column if not exists media_url  text;
 alter table public.posts add column if not exists media_type text;
+
+-- media_type check (image | video)
 do $$
 begin
   if not exists (
@@ -47,8 +53,23 @@ begin
   end if;
 end $$;
 
-create index if not exists posts_client_id_idx on public.posts (client_id);
-create index if not exists posts_date_idx      on public.posts (date);
+-- platform check — the six supported platforms. Drop & re-add so re-running
+-- this file widens an older two-platform constraint in place.
+alter table public.posts drop constraint if exists posts_platform_check;
+alter table public.posts
+  add constraint posts_platform_check
+  check (platform in ('linkedin','tiktok','pinterest','instagram','facebook','gbp'));
+
+-- status check — Pending → Approved → Posted, plus Changes Requested.
+-- Drop & re-add so re-running widens an older constraint that lacked 'posted'.
+alter table public.posts drop constraint if exists posts_status_check;
+alter table public.posts
+  add constraint posts_status_check
+  check (status in ('pending','approved','changes_requested','posted'));
+
+create index if not exists posts_client_id_idx  on public.posts (client_id);
+create index if not exists posts_date_idx        on public.posts (date);
+create index if not exists posts_publish_at_idx  on public.posts (publish_at);
 
 -- ----------------------------------------------------------------
 --  Row Level Security
@@ -105,7 +126,7 @@ begin
   select coalesce(json_agg(row_to_json(p) order by p.date, p.created_at), '[]'::json)
     into v_posts
   from (
-    select id, client_id, date, platform, post_type, caption,
+    select id, client_id, date, publish_at, platform, post_type, caption,
            image_url, media_url, media_type,
            status, reviewer_notes, created_at
     from public.posts
@@ -120,6 +141,8 @@ end;
 $$;
 
 -- Let a client set ONLY status + reviewer_notes on one of THEIR posts.
+-- Clients can ONLY move a post to 'approved' or 'changes_requested' (or back
+-- to 'pending'); marking a post 'posted' is reserved for the signed-in admin.
 create or replace function public.submit_review(
   p_token   text,
   p_post_id uuid,

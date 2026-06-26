@@ -7,14 +7,30 @@ deploys as-is on GitHub Pages.
 
 There are two sides:
 
-- **Admin** (you) — sign in, manage clients, and add / edit / delete posts.
+- **Admin** (you) — sign in, manage clients, and add / edit / delete posts. Switch
+  between the **Calendar** and an **Approved & Scheduled** posting queue.
 - **Client review** — a shareable per-client link. Clients see only their own posts
   (images and playable videos) and can **Approve** or **Request Changes** with notes.
   On phones it's a scrollable, big-tap-target list grouped by date; on tablet/desktop
   it's the calendar grid. They can't add, edit, or delete anything.
 
-Status colors are unchanged: **Pending** (gray), **Approved** (green),
-**Changes Requested** (orange).
+**Platforms** (each color-coded): LinkedIn, TikTok, Pinterest, Instagram, Facebook,
+and Google Business Profile (GBP). Images and videos work the same across all six.
+
+**Status flow:** **Pending** (gray) → **Approved** (green) → **Posted** (blue), plus
+**Changes Requested** (orange). Clients can only set *Approved* or *Changes Requested*;
+only the admin can mark a post **Posted**.
+
+Each post also carries a **publish date & time** (when it should go live), separate
+from when it was created — shown on the calendar, the post detail, and the queue.
+
+### The Approved & Scheduled queue
+
+The admin **Approved & Scheduled** tab is your daily posting worksheet: every approved
+post that hasn't been posted yet, sorted by publish date/time. Each item shows the
+platform tag, publish time, the media, and the full caption — with one-click **Copy
+caption** and **Download media** buttons, plus **Mark as Posted** (which moves it out
+of the queue). You use it to post natively into each platform.
 
 ---
 
@@ -59,13 +75,16 @@ https://YOUR-USER.github.io/content-approval-calendar/
 1. **Sign in** with the email/password you created above.
 2. Pick a **Client** from the dropdown, or click **+ New client** to add one.
 3. Click **+ Add post** (or click any day cell) to schedule a post. Choose the
-   date, platform (Facebook / Instagram), post type, and caption. For **media**,
-   drag & drop (or browse to) an image (JPG, PNG, WEBP, GIF) or video (MP4, MOV,
-   WEBM) — it uploads to the `post-media` bucket with a live progress bar and shows
-   a thumbnail / video preview. Media is optional, and you can still paste a URL as
-   a fallback. It saves to Supabase immediately.
+   date, platform (LinkedIn, TikTok, Pinterest, Instagram, Facebook, or GBP), post
+   type, status, **publish date & time**, and caption. For **media**, drag & drop
+   (or browse to) an image (JPG, PNG, WEBP, GIF) or video (MP4, MOV, WEBM) — it
+   uploads to the `post-media` bucket with a live progress bar and shows a thumbnail
+   / video preview. Media is optional, and you can still paste a URL as a fallback.
+   It saves to Supabase immediately.
 4. Click an existing post to **edit** or **delete** it.
-5. The summary bar at the top reflects the selected client's real numbers.
+5. Switch to the **Approved & Scheduled** tab to work your posting queue (copy
+   caption, download media, mark posted).
+6. The summary bar at the top reflects the selected client's real numbers.
 
 ---
 

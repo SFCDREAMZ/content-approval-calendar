@@ -5,10 +5,19 @@
   --text: #1d2433;
   --text-muted: #667085;
 
+  /* Platform accent + soft (tag background) colors — six distinct hues */
   --facebook: #1877f2;
   --facebook-soft: #e7f0fe;
   --instagram: #e1306c;
   --instagram-soft: #fdeaf1;
+  --linkedin: #0a66c2;
+  --linkedin-soft: #e3effb;
+  --tiktok: #111827;
+  --tiktok-soft: #e7e9ee;
+  --pinterest: #e60023;
+  --pinterest-soft: #fde7ea;
+  --gbp: #0f9d58;
+  --gbp-soft: #e4f5ec;
 
   --pending: #98a2b3;
   --pending-soft: #f2f4f7;
@@ -16,6 +25,8 @@
   --approved-soft: #e7f8ef;
   --changes: #f79009;
   --changes-soft: #fef3e6;
+  --posted: #2e74e8;
+  --posted-soft: #e6eefc;
 
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
   --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.18);
@@ -121,7 +132,7 @@ html, body {
 /* ---------- Summary bar ---------- */
 .summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin-bottom: 22px;
 }
@@ -140,9 +151,11 @@ html, body {
 .summary-card.is-approved { border-top: 3px solid var(--approved); }
 .summary-card.is-pending  { border-top: 3px solid var(--pending); }
 .summary-card.is-changes  { border-top: 3px solid var(--changes); }
+.summary-card.is-posted   { border-top: 3px solid var(--posted); }
 .summary-card.is-approved .summary-value { color: var(--approved); }
 .summary-card.is-pending  .summary-value { color: var(--pending); }
 .summary-card.is-changes  .summary-value { color: var(--changes); }
+.summary-card.is-posted   .summary-value { color: var(--posted); }
 
 /* ---------- Month nav ---------- */
 .month-nav {
@@ -255,6 +268,10 @@ html, body {
 .post-chip:active { transform: translateY(1px); }
 .post-chip.platform-facebook  { border-left-color: var(--facebook); }
 .post-chip.platform-instagram { border-left-color: var(--instagram); }
+.post-chip.platform-linkedin  { border-left-color: var(--linkedin); }
+.post-chip.platform-tiktok    { border-left-color: var(--tiktok); }
+.post-chip.platform-pinterest { border-left-color: var(--pinterest); }
+.post-chip.platform-gbp       { border-left-color: var(--gbp); }
 
 .post-chip-top { display: flex; align-items: center; gap: 5px; }
 .post-chip .platform-dot {
@@ -262,6 +279,10 @@ html, body {
 }
 .platform-facebook  .platform-dot { background: var(--facebook); }
 .platform-instagram .platform-dot { background: var(--instagram); }
+.platform-linkedin  .platform-dot { background: var(--linkedin); }
+.platform-tiktok    .platform-dot { background: var(--tiktok); }
+.platform-pinterest .platform-dot { background: var(--pinterest); }
+.platform-gbp       .platform-dot { background: var(--gbp); }
 .post-chip .post-type {
   font-size: 0.68rem;
   font-weight: 600;
@@ -275,6 +296,13 @@ html, body {
 .status-dot.status-pending  { background: var(--pending); }
 .status-dot.status-approved { background: var(--approved); }
 .status-dot.status-changes  { background: var(--changes); }
+.status-dot.status-posted   { background: var(--posted); }
+.post-chip .post-time {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
 .post-chip .post-caption {
   font-size: 0.74rem;
   color: var(--text);
@@ -295,10 +323,15 @@ html, body {
 }
 .platform-tag.platform-facebook  { background: var(--facebook-soft); color: var(--facebook); }
 .platform-tag.platform-instagram { background: var(--instagram-soft); color: var(--instagram); }
+.platform-tag.platform-linkedin  { background: var(--linkedin-soft); color: var(--linkedin); }
+.platform-tag.platform-tiktok    { background: var(--tiktok-soft); color: var(--tiktok); }
+.platform-tag.platform-pinterest { background: var(--pinterest-soft); color: var(--pinterest); }
+.platform-tag.platform-gbp       { background: var(--gbp-soft); color: var(--gbp); }
 .type-tag { background: var(--pending-soft); color: var(--text-muted); }
 .status-pill.status-pending  { background: var(--pending-soft); color: #475467; }
 .status-pill.status-approved { background: var(--approved-soft); color: var(--approved); }
 .status-pill.status-changes  { background: var(--changes-soft); color: var(--changes); }
+.status-pill.status-posted   { background: var(--posted-soft); color: var(--posted); }
 
 /* ---------- Modal ---------- */
 .modal-overlay {
@@ -336,6 +369,10 @@ html, body {
 }
 .modal-thumb.platform-facebook  { background: linear-gradient(135deg, #1877f2, #0b5ed7); }
 .modal-thumb.platform-instagram { background: linear-gradient(135deg, #f9ce34, #ee2a7b 55%, #6228d7); }
+.modal-thumb.platform-linkedin  { background: linear-gradient(135deg, #0a66c2, #044a92); }
+.modal-thumb.platform-tiktok    { background: linear-gradient(135deg, #25f4ee, #111827 55%, #fe2c55); }
+.modal-thumb.platform-pinterest { background: linear-gradient(135deg, #e60023, #ad001a); }
+.modal-thumb.platform-gbp       { background: linear-gradient(135deg, #34a853, #0f9d58 60%, #1a73e8); }
 .modal-thumb[style*="background-image"] { background-size: cover; background-position: center; }
 .modal-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .modal-date { font-size: 0.82rem; color: var(--text-muted); margin: 0 0 8px; font-weight: 500; }
@@ -513,6 +550,11 @@ html, body {
 }
 .review-card.platform-facebook  { border-left-color: var(--facebook); }
 .review-card.platform-instagram { border-left-color: var(--instagram); }
+.review-card.platform-linkedin  { border-left-color: var(--linkedin); }
+.review-card.platform-tiktok    { border-left-color: var(--tiktok); }
+.review-card.platform-pinterest { border-left-color: var(--pinterest); }
+.review-card.platform-gbp       { border-left-color: var(--gbp); }
+.review-card-when { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin: 0 0 10px; }
 .review-card-media { margin-bottom: 12px; border-radius: 11px; }
 .review-card-media img, .review-card-media video { max-height: 380px; object-fit: contain; }
 .review-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -524,10 +566,116 @@ html, body {
 .day-cell.is-clickable { cursor: pointer; }
 .day-cell.is-clickable:hover { background: #fafbff; }
 
+/* ---------- Admin view tabs (Calendar / Queue) ---------- */
+.view-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  background: var(--pending-soft);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.view-tab {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.view-tab:hover { color: var(--text); }
+.view-tab.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Approved & Scheduled queue ---------- */
+.queue-view { display: block; }
+.queue-count {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+}
+.queue-empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 22px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.queue-list { display: flex; flex-direction: column; gap: 14px; }
+.queue-card {
+  display: flex;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.queue-card.platform-facebook  { border-left-color: var(--facebook); }
+.queue-card.platform-instagram { border-left-color: var(--instagram); }
+.queue-card.platform-linkedin  { border-left-color: var(--linkedin); }
+.queue-card.platform-tiktok    { border-left-color: var(--tiktok); }
+.queue-card.platform-pinterest { border-left-color: var(--pinterest); }
+.queue-card.platform-gbp       { border-left-color: var(--gbp); }
+.queue-card-media {
+  flex: 0 0 180px;
+  width: 180px;
+  border-radius: 9px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+.queue-card-media .media { border-radius: 9px; }
+.queue-card-media .media img, .queue-card-media .media video {
+  max-height: 200px; object-fit: contain;
+}
+.queue-card-media.is-empty {
+  display: grid;
+  place-items: center;
+  height: 110px;
+  background: var(--pending-soft);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.queue-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.queue-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.queue-card-when { font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0; }
+.queue-card-caption {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.queue-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.queue-btn { font-size: 0.82rem; }
+.queue-btn:disabled { opacity: 0.5; cursor: default; }
+.queue-btn-posted { background: var(--posted); }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
   .summary { grid-template-columns: repeat(2, 1fr); }
   .app-main { padding: 16px; }
+
+  /* Queue cards stack vertically on phones. */
+  .queue-card { flex-direction: column; gap: 12px; }
+  .queue-card-media { flex-basis: auto; width: 100%; }
+  .queue-card-media .media img, .queue-card-media .media video { max-height: 260px; width: 100%; }
+  .queue-card-actions .queue-btn { flex: 1; }
+  .view-tabs { display: flex; width: 100%; }
+  .view-tab { flex: 1; }
   .day-cell { min-height: 84px; padding: 4px; }
   .weekday-row > div { padding: 8px 2px; font-size: 0.62rem; }
   .day-number { font-size: 0.7rem; }
