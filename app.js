@@ -46,6 +46,12 @@
   var activeId  = null;         // post open in the review modal
   var editingId = null;         // post open in the editor (null = adding)
 
+  // Editor media state. Precedence on save: pendingFile > pasted URL > existing.
+  var pendingFile       = null; // File chosen but not yet uploaded
+  var existingMediaUrl  = null; // media already on the post being edited
+  var existingMediaType = null;
+  var lastObjectUrl     = null; // object URL for the local preview (revoked on clear)
+
   /* ---------------- Small DOM helpers ---------------- */
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
@@ -70,6 +76,70 @@
     var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
     var weekdays = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
     return weekdays[d.getDay()] + ", " + MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
+
+  /* ---------------- Media helpers ---------------- */
+  var IMG_EXT = ["jpg", "jpeg", "png", "webp", "gif"];
+  var VID_EXT = ["mp4", "mov", "m4v", "webm", "ogv"];
+
+  function extOf(name) {
+    return (name.split("?")[0].split("#")[0].split(".").pop() || "").toLowerCase();
+  }
+  function mediaTypeForFile(file) {
+    if (file.type) {
+      if (file.type.indexOf("video/") === 0) return "video";
+      if (file.type.indexOf("image/") === 0) return "image";
+    }
+    return VID_EXT.indexOf(extOf(file.name)) >= 0 ? "video" : "image";
+  }
+  function mediaTypeForUrl(url) {
+    return VID_EXT.indexOf(extOf(url)) >= 0 ? "video" : "image";
+  }
+  function isAcceptedMedia(file) {
+    if (file.type.indexOf("video/") === 0 || file.type.indexOf("image/") === 0) return true;
+    var e = extOf(file.name);
+    return IMG_EXT.indexOf(e) >= 0 || VID_EXT.indexOf(e) >= 0;
+  }
+
+  // A post's media, tolerant of legacy rows that only had `image_url`.
+  function postMediaUrl(p) { return p.media_url || p.image_url || ""; }
+  function postMediaType(p) {
+    if (p.media_type) return p.media_type;
+    var u = postMediaUrl(p);
+    return u ? mediaTypeForUrl(u) : "";
+  }
+
+  // Build a media element (image, or HTML5 <video>). `opts.controls` shows a
+  // real player; otherwise a quiet first-frame preview with a ▶ badge.
+  function buildMedia(url, type, opts) {
+    opts = opts || {};
+    var wrap = document.createElement("div");
+    wrap.className = "media" + (opts.cls ? " " + opts.cls : "");
+    if (type === "video") {
+      wrap.classList.add("is-video");
+      var v = document.createElement("video");
+      v.src = url;
+      v.preload = "metadata";
+      v.playsInline = true;
+      if (opts.controls) {
+        v.controls = true;            // playable, but never autoplay
+      } else {
+        v.tabIndex = -1;
+        v.muted = true;
+        var badge = document.createElement("span");
+        badge.className = "play-badge";
+        badge.textContent = "▶";
+        wrap.appendChild(badge);
+      }
+      wrap.insertBefore(v, wrap.firstChild);
+    } else {
+      var img = document.createElement("img");
+      img.src = url;
+      img.alt = opts.alt || "";
+      img.loading = "lazy";
+      wrap.appendChild(img);
+    }
+    return wrap;
   }
 
   /* ---------------- Rendering ---------------- */
@@ -165,6 +235,11 @@
 
     chip.appendChild(top);
 
+    var mUrl = postMediaUrl(p);
+    if (mUrl) {
+      chip.appendChild(buildMedia(mUrl, postMediaType(p), { cls: "chip-media" }));
+    }
+
     var cap = document.createElement("span");
     cap.className = "post-caption";
     cap.textContent = p.caption;
@@ -180,11 +255,13 @@
 
   function setThumb(el, p) {
     el.className = "modal-thumb platform-" + p.platform;
-    if (p.image_url) {
-      el.style.backgroundImage = "url('" + p.image_url.replace(/'/g, "%27") + "')";
-      el.textContent = "";
+    el.style.backgroundImage = "";
+    el.innerHTML = "";
+    var url = postMediaUrl(p);
+    if (url) {
+      el.classList.add("has-media");
+      el.appendChild(buildMedia(url, postMediaType(p), { controls: true, alt: p.caption || "" }));
     } else {
-      el.style.backgroundImage = "";
       el.textContent = (PLATFORMS[p.platform] || {}).icon || "";
     }
   }
@@ -220,29 +297,129 @@
     activeId = null;
   }
 
-  async function submitReview(status) {
+  function submitReview(status) {
     if (!activeId) return;
-    var notes = $("modal-notes").value.trim();
-    var approveBtn = $("btn-approve"), changesBtn = $("btn-request-changes");
-    approveBtn.disabled = changesBtn.disabled = true;
+    applyReview(activeId, status, $("modal-notes").value.trim(),
+      [$("btn-approve"), $("btn-request-changes")]);
+  }
+
+  // Shared by the desktop review modal and the mobile review cards.
+  async function applyReview(postId, status, notes, buttons) {
+    buttons.forEach(function (b) { b.disabled = true; });
     try {
       var res = await db.rpc("submit_review", {
         p_token: reviewToken,
-        p_post_id: activeId,
+        p_post_id: postId,
         p_status: status,
         p_notes: notes
       });
       if (res.error) throw res.error;
-      var p = getPost(activeId);
+      var p = getPost(postId);
       if (p) { p.status = status; p.reviewer_notes = notes; }
       renderSummary();
       renderCalendar();
-      closeReview();
+      renderReviewList();
+      if (activeId === postId) closeReview();
     } catch (err) {
       alert("Could not save your review: " + (err.message || err));
     } finally {
-      approveBtn.disabled = changesBtn.disabled = false;
+      buttons.forEach(function (b) { b.disabled = false; });
     }
+  }
+
+  /* ---------------- Client review: mobile list ---------------- */
+  function renderReviewList() {
+    var host = $("review-list");
+    if (!host) return;
+    host.innerHTML = "";
+    if (MODE !== "client") return;
+    if (!posts.length) {
+      host.innerHTML = '<p class="review-empty">No posts to review yet.</p>';
+      return;
+    }
+    var byDate = {};
+    posts.forEach(function (p) { (byDate[p.date] = byDate[p.date] || []).push(p); });
+
+    Object.keys(byDate).sort().forEach(function (key) {
+      var group = document.createElement("section");
+      group.className = "review-group";
+      var h = document.createElement("h3");
+      h.className = "review-group-date";
+      h.textContent = formatLongDate(key);
+      group.appendChild(h);
+      byDate[key].forEach(function (p) { group.appendChild(buildReviewCard(p)); });
+      host.appendChild(group);
+    });
+  }
+
+  function buildReviewCard(p) {
+    var card = document.createElement("article");
+    card.className = "review-card platform-" + p.platform;
+
+    var url = postMediaUrl(p);
+    if (url) {
+      card.appendChild(buildMedia(url, postMediaType(p),
+        { controls: true, cls: "review-card-media", alt: p.caption || "" }));
+    }
+
+    var meta = document.createElement("div");
+    meta.className = "review-card-meta";
+    var plat = document.createElement("span");
+    plat.className = "platform-tag platform-" + p.platform;
+    plat.textContent = (PLATFORMS[p.platform] || {}).label || p.platform;
+    meta.appendChild(plat);
+    var type = document.createElement("span");
+    type.className = "type-tag";
+    type.textContent = p.post_type;
+    meta.appendChild(type);
+    var st = STATUSES[p.status] || STATUSES.pending;
+    var pill = document.createElement("span");
+    pill.className = "status-pill " + st.cls;
+    pill.textContent = st.label;
+    meta.appendChild(pill);
+    card.appendChild(meta);
+
+    if (p.caption) {
+      var cap = document.createElement("p");
+      cap.className = "review-card-caption";
+      cap.textContent = p.caption;
+      card.appendChild(cap);
+    }
+
+    var lbl = document.createElement("label");
+    lbl.className = "notes-label";
+    lbl.setAttribute("for", "rc-notes-" + p.id);
+    lbl.textContent = "Reviewer notes";
+    card.appendChild(lbl);
+    var ta = document.createElement("textarea");
+    ta.className = "notes-input";
+    ta.id = "rc-notes-" + p.id;
+    ta.rows = 2;
+    ta.placeholder = "Add notes (optional for approvals, helpful for changes)…";
+    ta.value = p.reviewer_notes || "";
+    card.appendChild(ta);
+
+    var actions = document.createElement("div");
+    actions.className = "modal-actions";
+    var changesBtn = document.createElement("button");
+    changesBtn.type = "button";
+    changesBtn.className = "btn btn-changes";
+    changesBtn.textContent = "Request Changes";
+    var approveBtn = document.createElement("button");
+    approveBtn.type = "button";
+    approveBtn.className = "btn btn-approve";
+    approveBtn.textContent = "Approve";
+    changesBtn.addEventListener("click", function () {
+      applyReview(p.id, "changes_requested", ta.value.trim(), [approveBtn, changesBtn]);
+    });
+    approveBtn.addEventListener("click", function () {
+      applyReview(p.id, "approved", ta.value.trim(), [approveBtn, changesBtn]);
+    });
+    actions.appendChild(changesBtn);
+    actions.appendChild(approveBtn);
+    card.appendChild(actions);
+
+    return card;
   }
 
   /* ---------------- Admin: post editor ---------------- */
@@ -255,8 +432,17 @@
     $("f-platform").value = p ? p.platform : "facebook";
     $("f-type").value     = p ? p.post_type : "Photo";
     $("f-caption").value  = p ? p.caption : "";
-    $("f-image").value    = p ? (p.image_url || "") : "";
     $("editor-delete").hidden = !p;
+
+    // Reset media controls, then show any existing media as a preview.
+    pendingFile = null;
+    $("f-image").value = "";
+    $("f-file").value = "";
+    existingMediaUrl  = p ? (postMediaUrl(p) || null) : null;
+    existingMediaType = p ? (postMediaType(p) || null) : null;
+    hideUploadProgress();
+    if (existingMediaUrl) showDropzonePreview(existingMediaUrl, existingMediaType, false);
+    else clearDropzonePreview();
 
     $("editor-overlay").hidden = false;
     $("f-caption").focus();
@@ -264,25 +450,152 @@
   function closeEditor() {
     $("editor-overlay").hidden = true;
     editingId = null;
+    pendingFile = null;
+    clearDropzonePreview();
+  }
+
+  /* ---------------- Admin: media picker (drag & drop + upload) ---------------- */
+  function onFileChosen(file) {
+    if (!file) return;
+    if (!isAcceptedMedia(file)) {
+      alert("Please choose an image (JPG, PNG, WEBP, GIF) or a video (MP4, MOV, WEBM).");
+      return;
+    }
+    pendingFile = file;
+    existingMediaUrl = existingMediaType = null;  // a new file supersedes existing media
+    $("f-image").value = "";
+    showDropzonePreview(URL.createObjectURL(file), mediaTypeForFile(file), true);
+  }
+
+  function onUrlInput() {
+    if (pendingFile) return;            // a picked file takes precedence
+    var v = $("f-image").value.trim();
+    if (v) {
+      existingMediaUrl = existingMediaType = null;
+      showDropzonePreview(v, mediaTypeForUrl(v), false);
+    } else if (!existingMediaUrl) {
+      clearDropzonePreview();
+    }
+  }
+
+  function showDropzonePreview(url, type, isObjectUrl) {
+    var prev = $("dropzone-preview");
+    prev.innerHTML = "";
+    var el;
+    if (type === "video") {
+      el = document.createElement("video");
+      el.src = url; el.controls = true; el.preload = "metadata"; el.playsInline = true;
+    } else {
+      el = document.createElement("img");
+      el.src = url; el.alt = "Selected media preview";
+    }
+    prev.appendChild(el);
+    prev.hidden = false;
+    $("dropzone-empty").hidden = true;
+    $("dropzone-remove").hidden = false;
+    if (lastObjectUrl && lastObjectUrl !== url) URL.revokeObjectURL(lastObjectUrl);
+    lastObjectUrl = isObjectUrl ? url : null;
+  }
+
+  function clearDropzonePreview() {
+    var prev = $("dropzone-preview");
+    if (prev) { prev.innerHTML = ""; prev.hidden = true; }
+    if ($("dropzone-empty")) $("dropzone-empty").hidden = false;
+    if ($("dropzone-remove")) $("dropzone-remove").hidden = true;
+    if (lastObjectUrl) { URL.revokeObjectURL(lastObjectUrl); lastObjectUrl = null; }
+  }
+
+  function removeMedia() {
+    pendingFile = null;
+    existingMediaUrl = existingMediaType = null;
+    $("f-image").value = "";
+    $("f-file").value = "";
+    clearDropzonePreview();
+  }
+
+  function showUploadProgress(frac) {
+    $("upload-progress").hidden = false;
+    var pct = Math.round((frac || 0) * 100);
+    $("upload-bar-fill").style.width = pct + "%";
+    $("upload-pct").textContent = "Uploading… " + pct + "%";
+  }
+  function hideUploadProgress() {
+    $("upload-progress").hidden = true;
+    $("upload-bar-fill").style.width = "0%";
+  }
+
+  // Upload to the public "post-media" bucket via the Storage REST endpoint so
+  // we get real upload progress (the JS client's .upload() doesn't expose it).
+  async function uploadMedia(file, onProgress) {
+    var ext  = extOf(file.name) || (mediaTypeForFile(file) === "video" ? "mp4" : "jpg");
+    var rand = Math.random().toString(36).slice(2, 8);
+    var path = (currentClientId || "shared") + "/" + Date.now() + "-" + rand + "." + ext;
+
+    var sess  = await db.auth.getSession();
+    var token = sess && sess.data && sess.data.session
+      ? sess.data.session.access_token : SUPABASE_ANON_KEY;
+
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", SUPABASE_URL + "/storage/v1/object/post-media/" + path);
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
+      xhr.setRequestHeader("x-upsert", "true");
+      if (file.type) xhr.setRequestHeader("Content-Type", file.type);
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(db.storage.from("post-media").getPublicUrl(path).data.publicUrl);
+        } else {
+          reject(new Error("Upload failed (" + xhr.status + "). " + (xhr.responseText || "")));
+        }
+      };
+      xhr.onerror = function () { reject(new Error("Network error during upload.")); };
+      xhr.send(file);
+    });
   }
 
   async function saveEditor(e) {
     e.preventDefault();
     if (!currentClientId) { alert("Create or select a client first."); return; }
-
-    var record = {
-      client_id: currentClientId,
-      date:      $("f-date").value,
-      platform:  $("f-platform").value,
-      post_type: $("f-type").value,
-      caption:   $("f-caption").value.trim(),
-      image_url: $("f-image").value.trim() || null
-    };
-    if (!record.date) { alert("Please pick a date."); return; }
+    if (!$("f-date").value) { alert("Please pick a date."); return; }
 
     var saveBtn = $("editor-save");
     saveBtn.disabled = true;
     try {
+      // Resolve media: a freshly picked file uploads now; otherwise fall back
+      // to a pasted URL, then to whatever the post already had.
+      var mediaUrl = null, mediaType = null;
+      if (pendingFile) {
+        showUploadProgress(0);
+        mediaUrl  = await uploadMedia(pendingFile, showUploadProgress);
+        mediaType = mediaTypeForFile(pendingFile);
+        hideUploadProgress();
+      } else {
+        var pasted = $("f-image").value.trim();
+        if (pasted) {
+          mediaUrl = pasted;
+          mediaType = mediaTypeForUrl(pasted);
+        } else if (existingMediaUrl) {
+          mediaUrl = existingMediaUrl;
+          mediaType = existingMediaType;
+        }
+      }
+
+      var record = {
+        client_id:  currentClientId,
+        date:       $("f-date").value,
+        platform:   $("f-platform").value,
+        post_type:  $("f-type").value,
+        caption:    $("f-caption").value.trim(),
+        media_url:  mediaUrl,
+        media_type: mediaUrl ? mediaType : null,
+        // Keep the legacy column populated for images so older readers still work.
+        image_url:  mediaType === "image" ? mediaUrl : null
+      };
+
       if (editingId) {
         var up = await db.from("posts").update(record).eq("id", editingId);
         if (up.error) throw up.error;
@@ -293,6 +606,7 @@
       closeEditor();
       await loadAdminPosts();
     } catch (err) {
+      hideUploadProgress();
       alert("Could not save the post: " + (err.message || err));
     } finally {
       saveBtn.disabled = false;
@@ -494,6 +808,7 @@
     }
     renderSummary();
     renderCalendar();
+    renderReviewList();
   }
 
   /* ---------------- Events ---------------- */
@@ -536,6 +851,35 @@
     $("editor-form").addEventListener("submit", saveEditor);
     $("editor-delete").addEventListener("click", deletePost);
 
+    // Media picker: click-to-browse, drag & drop, paste-URL, remove.
+    var dz = $("dropzone");
+    dz.addEventListener("click", function (e) {
+      if (e.target.id === "dropzone-remove") return;
+      $("f-file").click();
+    });
+    dz.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("f-file").click(); }
+    });
+    $("f-file").addEventListener("change", function () {
+      if (this.files && this.files[0]) onFileChosen(this.files[0]);
+    });
+    ["dragenter", "dragover"].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add("is-dragover"); });
+    });
+    ["dragleave", "dragend", "drop"].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) {
+        if (ev !== "drop" && e.target !== dz) return;
+        dz.classList.remove("is-dragover");
+      });
+    });
+    dz.addEventListener("drop", function (e) {
+      e.preventDefault();
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) onFileChosen(f);
+    });
+    $("dropzone-remove").addEventListener("click", function (e) { e.stopPropagation(); removeMedia(); });
+    $("f-image").addEventListener("input", onUrlInput);
+
     $("login-form").addEventListener("submit", handleLogin);
     $("login-close").addEventListener("click", function () { showLogin(false); });
     $("login-overlay").addEventListener("click", function (e) { if (e.target === this) showLogin(false); });
@@ -545,6 +889,7 @@
 
   /* ---------------- Init ---------------- */
   async function init() {
+    document.body.classList.add("mode-" + MODE);
     wireCommon();
     renderSummary();
     renderCalendar();
